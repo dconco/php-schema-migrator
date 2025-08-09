@@ -1,0 +1,50 @@
+#!/usr/bin/env php
+<?php
+require __DIR__.'/bootstrap/db.php';
+
+// Basic CLI router
+$cmd = $argv[1] ?? null;
+
+if ($cmd === 'make') {
+    $name = $argv[2] ?? 'NewMigration';
+    $filename = date('Y_m_d_His') . "_{$name}.php";
+    $template = <<<PHP_EOL
+<?php
+
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Capsule\Manager as Capsule;
+
+return new class extends Migration {
+    public function up() {
+        Capsule::schema()->create('example', function (Blueprint \$table) {
+            \$table->id();
+            \$table->string('name');
+            \$table->timestamps();
+        });
+    }
+    public function down() {
+        Capsule::schema()->dropIfExists('example');
+    }
+};
+PHP_EOL;
+
+    file_put_contents(__DIR__ . "/database/migrations/{$filename}", $template);
+    echo "Created: database/migrations/{$filename}\\n";
+}
+
+if ($cmd === 'migrate') {
+    foreach (glob(__DIR__.'/database/migrations/*.php') as $file) {
+        echo "Running: {$file}\\n";
+        $migration = require $file;
+        $migration->up();
+    }
+}
+
+if ($cmd === 'rollback') {
+    foreach (array_reverse(glob(__DIR__.'/database/migrations/*.php')) as $file) {
+        echo "Rolling back: {$file}\\n";
+        $migration = require $file;
+        $migration->down();
+    }
+}
