@@ -6,15 +6,20 @@ require __DIR__.'/database/db.php';
 $cmd = $argv[1] ?? null;
 
 if ($cmd === 'make') {
-    $name = $argv[2] ?? 'NewMigration';
-    $newName = $name;
-    // Remove 'Table' from the end if present
-    if (str_ends_with($newName, 'Table')) {
-        $newName = substr($newName, 0, -5);
-    }
+    $name = $argv[2] ?? 'NewMigrationTable';
+    
     // Convert PascalCase to snake_case
-    $newName = strtolower(preg_replace('/([a-z])([A-Z])/', '$1_$2', $newName));
-    $filename = date('Y_m_d_His') . "_$name.php";
+    $name = strtolower(preg_replace('/([a-z])([A-Z])/', '$1_$2', $name));
+    
+    // Remove 'Table' from the end if present
+    if (str_ends_with($name, '_table')) {
+        $newName = substr($name, 0, -6);
+    } else {
+        echo "Migration name should be in the format 'UsersTable'";
+        exit(1);
+    }
+
+    $filename = date('Y_m_d_His') . "_create_$name.php";
     $template = <<<PHP_EOL
 <?php
 
@@ -44,7 +49,7 @@ PHP_EOL;
 }
 
 if ($cmd === 'migrate') {
-    foreach (glob(__DIR__.'/database/migrations/*.php') as $file) {
+    foreach (glob(__DIR__.'/database/migrations/*_table.php') as $file) {
         echo "Running: $file\n";
         $migration = require $file;
         $migration->up();
@@ -52,7 +57,7 @@ if ($cmd === 'migrate') {
 }
 
 if ($cmd === 'rollback') {
-    foreach (array_reverse(glob(__DIR__.'/database/migrations/*.php')) as $file) {
+    foreach (array_reverse(glob(__DIR__.'/database/migrations/*_table.php')) as $file) {
         echo "Rolling back: $file\n";
         $migration = require $file;
         $migration->down();
