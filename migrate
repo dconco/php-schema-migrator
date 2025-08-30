@@ -40,12 +40,12 @@ PHP_EOL;
    if (!is_dir($dirName)) mkdir($dirName, 0, true);
 
    file_put_contents("$dirName/$filename", $template);
-   echo "Created: database/migrations/{$filename}\\n";
+   echo "Created: database/migrations/$filename\n";
 }
 
 if ($cmd === 'migrate') {
     foreach (glob(__DIR__.'/database/migrations/*.php') as $file) {
-        echo "Running: {$file}\\n";
+        echo "Running: $file\n";
         $migration = require $file;
         $migration->up();
     }
@@ -53,7 +53,7 @@ if ($cmd === 'migrate') {
 
 if ($cmd === 'rollback') {
     foreach (array_reverse(glob(__DIR__.'/database/migrations/*.php')) as $file) {
-        echo "Rolling back: {$file}\\n";
+        echo "Rolling back: $file\n";
         $migration = require $file;
         $migration->down();
     }
