@@ -16,17 +16,15 @@ composer require --dev illuminate/database illuminate/events
 
 ```
 project-root/
-├── bootstrap/
-│   └── db.php
 ├── database/
 │   └── migrations/
+│   └── db.php
 ├── migrate (CLI script)
-├── vendor/
 └── composer.json
 ```
 
 3. **Configure Database**
-   Edit `bootstrap/db.php`:
+   Edit `database/db.php`:
 
 ```php
 <?php
