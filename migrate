@@ -1,13 +1,20 @@
 #!/usr/bin/env php
 <?php
-require __DIR__.'/bootstrap/db.php';
+require __DIR__.'/database/db.php';
 
 // Basic CLI router
 $cmd = $argv[1] ?? null;
 
 if ($cmd === 'make') {
     $name = $argv[2] ?? 'NewMigration';
-    $filename = date('Y_m_d_His') . "_{$name}.php";
+    $newName = $name;
+    // Remove 'Table' from the end if present
+    if (str_ends_with($newName, 'Table')) {
+        $newName = substr($newName, 0, -5);
+    }
+    // Convert PascalCase to snake_case
+    $newName = strtolower(preg_replace('/([a-z])([A-Z])/', '$1_$2', $newName));
+    $filename = date('Y_m_d_His') . "_$name.php";
     $template = <<<PHP_EOL
 <?php
 
@@ -17,14 +24,14 @@ use Illuminate\Database\Capsule\Manager as Capsule;
 
 return new class extends Migration {
     public function up() {
-        Capsule::schema()->create('example', function (Blueprint \$table) {
+        Capsule::schema()->create('{$newName}', function (Blueprint \$table) {
             \$table->id();
             \$table->string('name');
             \$table->timestamps();
         });
     }
     public function down() {
-        Capsule::schema()->dropIfExists('example');
+        Capsule::schema()->dropIfExists('{$newName}');
     }
 };
 PHP_EOL;
