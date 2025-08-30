@@ -9,7 +9,7 @@ This setup allows you to use **Laravel-style migrations** in your existing plain
 1. **Install Dependencies**
 
 ```bash
-composer require illuminate/database illuminate/events
+composer require --dev illuminate/database illuminate/events
 ```
 
 2. **Project Structure**
