@@ -29,8 +29,11 @@ return new class extends Migration {
 };
 PHP_EOL;
 
-    file_put_contents(__DIR__ . "/database/migrations/{$filename}", $template);
-    echo "Created: database/migrations/{$filename}\\n";
+   $dirName = __DIR__ . "/database/migrations";
+   if (!is_dir($dirName)) mkdir($dirName, 0, true);
+
+   file_put_contents("$dirName/$filename", $template);
+   echo "Created: database/migrations/{$filename}\\n";
 }
 
 if ($cmd === 'migrate') {
