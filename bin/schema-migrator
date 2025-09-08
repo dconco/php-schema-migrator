@@ -1,0 +1,34 @@
+#!/usr/bin/env php
+<?php
+
+// Find the autoloader
+$autoloadPaths = [
+    __DIR__ . '/../vendor/autoload.php',  // For global installation
+    __DIR__ . '/../../../autoload.php',   // For local installation as dependency
+    __DIR__ . '/vendor/autoload.php',     // For development
+];
+
+$autoloaderFound = false;
+foreach ($autoloadPaths as $autoloadPath) {
+    if (file_exists($autoloadPath)) {
+        require_once $autoloadPath;
+        $autoloaderFound = true;
+        break;
+    }
+}
+
+if (!$autoloaderFound) {
+    fwrite(STDERR, "Error: Could not find vendor/autoload.php\n");
+    fwrite(STDERR, "Please run 'composer install' or install schema-migrator globally.\n");
+    exit(1);
+}
+
+use Dconco\SchemaMigrator\SchemaMigratorApplication;
+
+try {
+    $application = new SchemaMigratorApplication();
+    $application->run();
+} catch (Exception $e) {
+    fwrite(STDERR, "Error: " . $e->getMessage() . "\n");
+    exit(1);
+}
