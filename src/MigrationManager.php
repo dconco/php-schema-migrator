@@ -24,8 +24,9 @@ class MigrationManager
     public static function getExecutedMigrations(): array
     {
         $connection = DatabaseManager::getConnection();
+        $tableName = ConfigManager::getMigrationsTable();
         
-        return $connection->table('migrations')
+        return $connection->table($tableName)
             ->orderBy('batch')
             ->orderBy('migration')
             ->pluck('migration')
@@ -66,6 +67,7 @@ class MigrationManager
     {
         $pending = self::getPendingMigrations();
         $connection = DatabaseManager::getConnection();
+        $tableName = ConfigManager::getMigrationsTable();
         
         if (empty($pending)) {
             return [];
@@ -80,15 +82,25 @@ class MigrationManager
             if (!$migration instanceof Migration) {
                 throw new RuntimeException("Migration file {$file} must return a Migration instance");
             }
-            
-            $migration->up();
-            
+
             $filename = basename($file, '.php');
-            $connection->table('migrations')->insert([
-                'migration' => $filename,
-                'batch' => $batch,
-                'created_at' => date('Y-m-d H:i:s'),
-            ]);
+            $conn = self::getMigrationConnection($migration);
+
+            $run = function () use ($migration, $conn, $tableName, $filename, $batch) {
+                $migration->up();
+
+                $conn->table($tableName)->insert([
+                    'migration' => $filename,
+                    'batch' => $batch,
+                    'created_at' => date('Y-m-d H:i:s'),
+                ]);
+            };
+
+            if (self::supportsSchemaTransactions($migration, $conn)) {
+                $conn->transaction($run);
+            } else {
+                $run();
+            }
             
             $executed[] = $filename;
         }
@@ -99,14 +111,15 @@ class MigrationManager
     public static function rollbackMigrations(int $steps = 1): array
     {
         $connection = DatabaseManager::getConnection();
+        $tableName = ConfigManager::getMigrationsTable();
         
-        $lastBatch = $connection->table('migrations')->max('batch');
+        $lastBatch = $connection->table($tableName)->max('batch');
         
         if (!$lastBatch) {
             return [];
         }
 
-        $migrations = $connection->table('migrations')
+        $migrations = $connection->table($tableName)
             ->where('batch', $lastBatch)
             ->orderBy('migration', 'desc')
             ->get();
@@ -116,14 +129,30 @@ class MigrationManager
         foreach ($migrations as $migrationRecord) {
             $file = ConfigManager::getMigrationsPath() . '/' . $migrationRecord->migration . '.php';
             
+            $migration = null;
             if (file_exists($file)) {
                 $migration = require $file;
-                $migration->down();
             }
-            
-            $connection->table('migrations')
-                ->where('migration', $migrationRecord->migration)
-                ->delete();
+
+            $conn = ($migration instanceof Migration)
+                ? self::getMigrationConnection($migration)
+                : $connection;
+
+            $rollback = function () use ($migration, $conn, $tableName, $migrationRecord) {
+                if ($migration instanceof Migration) {
+                    $migration->down();
+                }
+
+                $conn->table($tableName)
+                    ->where('migration', $migrationRecord->migration)
+                    ->delete();
+            };
+
+            if ($migration instanceof Migration && self::supportsSchemaTransactions($migration, $conn)) {
+                $conn->transaction($rollback);
+            } else {
+                $rollback();
+            }
                 
             $rolledBack[] = $migrationRecord->migration;
         }
@@ -131,10 +160,32 @@ class MigrationManager
         return $rolledBack;
     }
 
+    public static function supportsSchemaTransactions(Migration $migration, $connection = null): bool
+    {
+        $connection = $connection ?? DatabaseManager::getConnection();
+
+        if (is_null($connection->getSchemaGrammar())) {
+            $connection->useDefaultSchemaGrammar();
+        }
+
+        return $connection->getSchemaGrammar()->supportsSchemaTransactions()
+            && ($migration->withinTransaction ?? true);
+    }
+
+    public static function getMigrationConnection(Migration $migration)
+    {
+        $connectionName = method_exists($migration, 'getConnection') ? $migration->getConnection() : null;
+
+        return $connectionName
+            ? DatabaseManager::getCapsule()->getConnection($connectionName)
+            : DatabaseManager::getConnection();
+    }
+
     private static function getNextBatchNumber(): int
     {
         $connection = DatabaseManager::getConnection();
-        return ($connection->table('migrations')->max('batch') ?? 0) + 1;
+        $tableName = ConfigManager::getMigrationsTable();
+        return ($connection->table($tableName)->max('batch') ?? 0) + 1;
     }
 
     private static function getMigrationTemplate(string $name): string

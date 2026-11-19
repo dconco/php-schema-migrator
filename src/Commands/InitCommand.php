@@ -9,7 +9,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Question\Question;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
-class InitCommand extends Command
+class InitCommand extends BaseCommand
 {
     protected function configure(): void
     {
@@ -26,7 +26,7 @@ class InitCommand extends Command
         $io->title('🚀 Schema Migrator Initialization');
         
         if (file_exists(ConfigManager::getConfigPath())) {
-            $io->warning('Schema Migrator is already initialized in this directory.');
+            $io->warning('Schema Migrator configuration already exists at: ' . ConfigManager::getConfigPath());
             return Command::SUCCESS;
         }
 
@@ -67,7 +67,7 @@ class InitCommand extends Command
         
         $io->note([
             'Next steps:',
-            '1. Edit schema-migrator.yml to fine-tune your configuration',
+            '1. Edit ' . basename(ConfigManager::getConfigPath()) . ' to fine-tune your configuration',
             '2. Create your first migration: schema-migrator make:migration CreateUsersTable',
             '3. Run migrations: schema-migrator migrate',
         ]);

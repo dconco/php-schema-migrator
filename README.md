@@ -9,8 +9,11 @@ A beautiful command-line database migration tool for any PHP project. Laravel-st
 ✨ **Beautiful CLI Interface** - Powered by Symfony Console with colored output and interactive commands  
 🚀 **Global Installation** - Install once, use anywhere in any PHP project  
 🔧 **Zero Dependencies** - No need to install Laravel or any framework in your projects  
-📁 **Project-Based Config** - Each project maintains its own configuration and migrations  
-🗄️ **Multi-Database Support** - MySQL, PostgreSQL, SQLite, and SQL Server  
+📁 **Project & Environment Config** - Support for default and custom config files (`--config` / `-c`)  
+🗄️ **Multi-Database Support** - MySQL, PostgreSQL, SQLite, and SQL Server with driver-specific defaults  
+🔄 **Transactional Migrations** - Driver-aware transaction support; atomic rollbacks on failure for PostgreSQL and SQL Server  
+🔤 **Automatic PostgreSQL Collation** - Applies connection collation to string/text columns seamlessly  
+⚙️ **Configurable Migration Storage** - Customizable migrations table name and migrations directory path  
 ⚡ **Laravel-Compatible** - Uses Laravel's proven migration syntax and features  
 
 ---
@@ -47,6 +50,11 @@ This will:
 - Create a `schema-migrator.yml` configuration file
 - Create a `database/migrations` directory
 - Prompt you for database connection details
+
+You can also initialize with a custom configuration path:
+```bash
+schema-migrator init --config schema-migrator-postgres.yml
+```
 
 ### 2. Create Your First Migration
 
@@ -95,44 +103,51 @@ schema-migrator migrate
 
 ## Commands
 
+All commands accept the `-c` or `--config` option to specify a custom configuration file.
+
 ### Initialize Project
 ```bash
 schema-migrator init
+schema-migrator init -c config/database.yml
 ```
-Creates configuration and migrations directory in current project.
+Creates configuration file and migrations directory in the current project.
 
 ### Create Migration
 ```bash
 schema-migrator make:migration CreatePostsTable
-schema-migrator make:migration AddEmailToUsersTable
+schema-migrator make:migration AddEmailToUsersTable -c schema-migrator-postgres.yml
 ```
-Creates a new migration file with timestamp.
+Creates a new timestamped migration file in the configured migrations directory.
 
 ### Run Migrations
 ```bash
 schema-migrator migrate
+schema-migrator migrate -c schema-migrator-postgres.yml
 ```
-Executes all pending migrations.
+Executes all pending migrations in order. If supported by the database engine, each migration runs inside a transaction.
 
 ### Check Status
 ```bash
 schema-migrator migrate:status
+schema-migrator migrate:status -c schema-migrator-postgres.yml
 ```
-Shows which migrations have been executed and which are pending.
+Displays an overview table showing which migrations have been executed and which are pending.
 
 ### Rollback Migrations
 ```bash
 schema-migrator migrate:rollback
 schema-migrator migrate:rollback --steps=3
+schema-migrator migrate:rollback -c schema-migrator-postgres.yml
 ```
-Rolls back the last batch of migrations (or specified number of batches).
+Rolls back the last batch of migrations (or the specified number of batches).
 
 ---
 
 ## Configuration
 
-The `schema-migrator.yml` file contains your project's configuration:
+By default, Schema Migrator looks for `schema-migrator.yml` in the current working directory. You can specify a different configuration using `--config` / `-c`.
 
+### MySQL Configuration
 ```yaml
 database:
   driver: mysql          # mysql, pgsql, sqlite, sqlsrv
@@ -149,6 +164,79 @@ migrations:
   path: database/migrations
 ```
 
+### PostgreSQL Configuration
+```yaml
+database:
+  driver: pgsql
+  host: 127.0.0.1
+  port: 5432
+  database: your_database
+  username: postgres
+  password: your_password
+  charset: UTF8
+  collation: 'und-u-ks-level2'  # Automatically applied to string/text columns
+  schema: public
+  sslmode: prefer
+  prefix: ''
+migrations:
+  table: schema_migrations      # Custom tracking table name
+  path: database/migrations     # Custom migrations directory path
+```
+
+### Configuration Options Reference
+
+| Section | Key | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `database` | `driver` | `mysql` | Driver name: `mysql`, `pgsql`, `sqlite`, or `sqlsrv` |
+| `database` | `host` | `127.0.0.1` | Database server hostname or IP |
+| `database` | `port` | `3306` (`5432` for pgsql, `1433` for sqlsrv) | Database server port |
+| `database` | `database` | `""` | Database name (or file path / `:memory:` for sqlite) |
+| `database` | `username` | `""` | Database user |
+| `database` | `password` | `""` | Database password |
+| `database` | `charset` | `utf8mb4` (`utf8` for pgsql) | Character encoding |
+| `database` | `collation` | `null` | Database/column collation |
+| `database` | `schema` | `public` | Search path / schema (PostgreSQL) |
+| `database` | `sslmode` | `prefer` | SSL mode (PostgreSQL) |
+| `migrations` | `table` | `migrations` | Table used to track migration history |
+| `migrations` | `path` | `database/migrations` | Path where migration files are stored (relative or absolute) |
+
+---
+
+## Transactional Migrations & Engine Support
+
+### How Transactions Work
+When running `migrate` or `migrate:rollback`:
+- **PostgreSQL & SQL Server**: Natively support transactional DDL. Each migration's schema changes and its tracking record insertion/deletion are wrapped inside a database transaction. If an error occurs midway through `up()` or `down()`, all changes are rolled back automatically. This prevents half-applied migrations and avoids `"column already exists"` errors on retry.
+- **MySQL / MariaDB**: Statements such as `ALTER TABLE` and `CREATE TABLE` trigger an **implicit commit** in MySQL, meaning DDL cannot be rolled back by transactions. Schema Migrator detects this and avoids rolling back non-transactional DDL to prevent `PDOException: There is no active transaction` errors.
+- **Disabling Transactions per Migration**: If you have a migration that cannot run inside a transaction, set the `withinTransaction` property to `false`:
+  ```php
+  return new class extends Migration {
+      public $withinTransaction = false;
+
+      public function up(): void
+      {
+          // ...
+      }
+  };
+  ```
+
+---
+
+## Multiple Environments & Custom Configs
+
+You can maintain separate configuration files for different environments (local, staging, testing, CI/CD) or different database engines:
+
+```bash
+# Local MySQL development
+schema-migrator migrate
+
+# Staging PostgreSQL database
+schema-migrator migrate --config config/schema-migrator-staging.yml
+
+# Testing SQLite database
+schema-migrator migrate -c schema-migrator.testing.yml
+```
+
 ---
 
 ## Usage Examples
@@ -157,6 +245,7 @@ migrations:
 ```
 your-project/
 ├── schema-migrator.yml
+├── schema-migrator-postgres.yml   # Optional alternate config
 ├── database/
 │   └── migrations/
 │       ├── 2025_01_01_000000_create_users.php
@@ -197,28 +286,10 @@ Capsule::schema()->table('posts', function (Blueprint $table) {
 
 ---
 
-## Multiple Projects
-
-Schema Migrator works per-project. You can use it in multiple projects simultaneously:
-
-```bash
-cd /project-a
-schema-migrator init      # Configure for project A
-schema-migrator migrate
-
-cd /project-b  
-schema-migrator init      # Configure for project B  
-schema-migrator migrate
-```
-
-Each project maintains its own configuration and migration state.
-
----
-
 ## Requirements
 
 - PHP 8.1 or higher
-- PDO extension for your database
+- PDO extension for your database (`pdo_mysql`, `pdo_pgsql`, `pdo_sqlite`, `pdo_sqlsrv`)
 - Composer (for global installation)
 
 ---
