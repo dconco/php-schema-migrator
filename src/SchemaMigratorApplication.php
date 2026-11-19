@@ -15,7 +15,7 @@ class SchemaMigratorApplication extends Application
 {
     public function __construct()
     {
-        parent::__construct('Schema Migrator', '1.1.0');
+        parent::__construct('Schema Migrator', '0.0.3');
 
         $this->add(new InitCommand());
         $this->add(new MakeCommand());
